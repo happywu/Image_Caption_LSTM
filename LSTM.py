@@ -1,5 +1,8 @@
 import numpy as np
 from utils import initw
+from utils import softmax
+import sys
+from datetime import datetime
 
 class LSTM:
 
@@ -89,6 +92,7 @@ class LSTM:
         dHin = np.zeros(Hin.shape)
         dC = np.zeros(C.shape)
         dX = np.zeros(X.shape)
+        n, d = Hout.shape
 
         for t in reversed(xrange(n)):
             tanhC = np.tanh(C[t])
@@ -116,4 +120,62 @@ class LSTM:
                 dHout[t-1] += dHin[t, d:]
 
         return {'WLSTM' : dWLSTM, 'Wd' : dWd, 'bd' : dbd, 'dX' : dX }
+
+    @staticmethod
+    def predict(Xs, model, params, **kwargs):
+
+        WLSTM = model['WLSTM']
+        d = model['Wd'].shape[0]
+        Wd = model['Wd']
+        bd = model['bd']
+
+        Y, cache = LSTM.forward(Xs, model)
+        Y = softmax(Y)
+
+        return np.argmax(Y, axis=1)
+
+    @staticmethod
+    def calc_total_loss(Xs, y, model):
+        L = 0
+        N = np.sum(len(y_i) for y_i in y)
+        for i in xrange(len(y)):
+            py, cache = LSTM.forward(Xs[i], model)
+            correct_word_prediction = py[np.arange(len(y[i])), y[i]]
+            L += -1 * np.sum(np.log(correct_word_prediction))
+
+        return L / N
+
+
+    @staticmethod
+    def sgd_step(Xs, y, learning_rate, model):
+        py, cache = LSTM.forward(Xs, model)
+        dY = py - y
+
+        bp = LSTM.backword(dY, cache)
+        dWLSTM = bp['WLSTM']
+        dWd = bp['Wd']
+        dbd = bp['bd']
+
+        model['WLSTM'] -= learning_rate * dWLSTM
+        model['Wd'] -= learning_rate * dWd
+        model['bd'] -= learning_rate *dbd
+
+    @staticmethod
+    def train_with_sgd(Xs, y, model, learning_rate=0.005, nepoch=1):
+        losses = []
+        for epoch in xrange(nepoch):
+
+            if(epoch % 5 ==0):
+                loss = LSTM.calc_total_loss(Xs, y, model)
+                losses.append(loss)
+                time = datetime.now.strftime('%Y-%m-%d-%H-%M-%s')
+                print '%s loss %d' %(time, loss)
+                sys.stdout.flush()
+
+
+            for i in xrange(len(y)):
+                LSTM.sgd_step(Xs[i], y[i], learning_rate, model)
+
+
+
 
