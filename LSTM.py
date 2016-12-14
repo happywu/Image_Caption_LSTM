@@ -164,7 +164,6 @@ class LSTM:
     def train_with_sgd(Xs, y, model, learning_rate=0.005, nepoch=1):
         losses = []
         for epoch in xrange(nepoch):
-
             if(epoch % 5 ==0):
                 loss = LSTM.calc_total_loss(Xs, y, model)
                 losses.append(loss)
