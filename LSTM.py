@@ -20,28 +20,30 @@ class LSTM:
         return { 'model' : model, 'update' : update}
 
     @staticmethod
-    def forward(Xs, model, params, **kwargs):
+    def forward(Xs, model, **kwargs):
 
         X = Xs
 
         WLSTM = model['WLSTM']
         Wd = model['Wd']
         bd = model['bd']
-        n = X.shape[0]
+        #n = X.shape[0]
+        n = len(X)
         d = model['Wd'].shape[0]
 
         Hin = np.zeros((n, WLSTM.shape[0]))
         Hout = np.zeros((n, d))
-        IFOG = np.zeros((n * 4))
-        IFOGf = np.zeros((n * 4))
+        IFOG = np.zeros((n,d * 4))
+        IFOGf = np.zeros((n, d * 4))
         C = np.zeros((n, d))
 
         for t in xrange(n):
             prev = np.zeros(d) if t == 0 else Hout[t-1]
-
+            
             Hin[t, 0] = 1
-            Hin[t, 1:1+d] = X[t]
-            Hin[t, 1+d:] = prev
+            #Hin[t, 1:1+d] = X[t]
+            Hin[t, 1:1+d] = prev # one hot representation            
+            Hin[t, 1+d+X[t]] = 1
 
             IFOG[t] = Hin[t].dot(WLSTM)
 
@@ -91,7 +93,8 @@ class LSTM:
         dWLSTM = np.zeros(WLSTM.shape)
         dHin = np.zeros(Hin.shape)
         dC = np.zeros(C.shape)
-        dX = np.zeros(X.shape)
+        #dX = np.zeros(X.shape)
+        #dX = np.zeros((len(X)+1, Wd.shape[1]))
         n, d = Hout.shape
 
         for t in reversed(xrange(n)):
@@ -115,20 +118,17 @@ class LSTM:
             dWLSTM +=  np.outer(Hin[t], dIFOG[t])
             dHin[t]  = dIFOG[t].dot(WLSTM.transpose())
 
-            dX[t] = dHin[t,:d]
+            #dX[t] = dHin[t,:d]
             if t > 0:
-                dHout[t-1] += dHin[t, d:]
+                dHout[t-1] += dHin[t, 1:1+d]
+                #dHout[t-1] += dHin[t, d:]
 
-        return {'WLSTM' : dWLSTM, 'Wd' : dWd, 'bd' : dbd, 'dX' : dX }
+        #return {'WLSTM' : dWLSTM, 'Wd' : dWd, 'bd' : dbd, 'dX' : dX }
+        return {'WLSTM' : dWLSTM, 'Wd' : dWd, 'bd' : dbd}
 
     @staticmethod
-    def predict(Xs, model, params, **kwargs):
-
-        WLSTM = model['WLSTM']
-        d = model['Wd'].shape[0]
-        Wd = model['Wd']
-        bd = model['bd']
-
+    def predict(Xs, model, **kwargs):
+        
         Y, cache = LSTM.forward(Xs, model)
         Y = softmax(Y)
 
@@ -138,7 +138,10 @@ class LSTM:
     def calc_total_loss(Xs, y, model):
         L = 0
         N = np.sum(len(y_i) for y_i in y)
+        
         for i in xrange(len(y)):
+            #print 'shuchu', i
+            #print len(Xs), len(y)
             py, cache = LSTM.forward(Xs[i], model)
             correct_word_prediction = py[np.arange(len(y[i])), y[i]]
             L += -1 * np.sum(np.log(correct_word_prediction))
@@ -149,6 +152,8 @@ class LSTM:
     @staticmethod
     def sgd_step(Xs, y, learning_rate, model):
         py, cache = LSTM.forward(Xs, model)
+       # print len(py), len(y)
+        y = np.reshape(y,(len(y),-1))
         dY = py - y
 
         bp = LSTM.backword(dY, cache)
@@ -161,20 +166,19 @@ class LSTM:
         model['bd'] -= learning_rate *dbd
 
     @staticmethod
-    def train_with_sgd(Xs, y, model, learning_rate=0.005, nepoch=1):
+    def train_with_sgd(model, Xs, y, learning_rate=0.005, nepoch=1, evaluate_loss_after=5):
         losses = []
+        #print 'cjjc', len(Xs), len(y)
         for epoch in xrange(nepoch):
-            if(epoch % 5 ==0):
+            if(epoch % evaluate_loss_after ==0):
                 loss = LSTM.calc_total_loss(Xs, y, model)
                 losses.append(loss)
-                time = datetime.now.strftime('%Y-%m-%d-%H-%M-%s')
-                print '%s loss %d' %(time, loss)
+                time = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+                print '%s loss %f' %(time, loss)
                 sys.stdout.flush()
 
-
+            
             for i in xrange(len(y)):
                 LSTM.sgd_step(Xs[i], y[i], learning_rate, model)
-
-
 
 
