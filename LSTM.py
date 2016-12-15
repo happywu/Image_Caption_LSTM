@@ -57,6 +57,7 @@ class LSTM:
 
         #Y = Hout[1:, :].dot(Wd) + bd
         Y = Hout.dot(Wd) + bd
+        Y = softmax(Y)
 
         cache = {}
 
@@ -130,7 +131,6 @@ class LSTM:
     def predict(Xs, model, **kwargs):
         
         Y, cache = LSTM.forward(Xs, model)
-        Y = softmax(Y)
 
         return np.argmax(Y, axis=1)
 
@@ -143,7 +143,10 @@ class LSTM:
             #print 'shuchu', i
             #print len(Xs), len(y)
             py, cache = LSTM.forward(Xs[i], model)
+            #print 'input ', Xs[i]
+            #print 'output ', np.argmax(softmax(py), axis=1)
             correct_word_prediction = py[np.arange(len(y[i])), y[i]]
+            #print correct_word_prediction
             L += -1 * np.sum(np.log(correct_word_prediction))
 
         return L / N
@@ -154,13 +157,16 @@ class LSTM:
         py, cache = LSTM.forward(Xs, model)
        # print len(py), len(y)
         y = np.reshape(y,(len(y),-1))
-        dY = py - y
+        dY = py
+        dY[np.arange(len(y)), y] -= 1
+        #print 'dY: ', dY
 
         bp = LSTM.backword(dY, cache)
         dWLSTM = bp['WLSTM']
         dWd = bp['Wd']
         dbd = bp['bd']
 
+        #print 'ddddd', model['bd'], dbd
         model['WLSTM'] -= learning_rate * dWLSTM
         model['Wd'] -= learning_rate * dWd
         model['bd'] -= learning_rate *dbd
@@ -168,17 +174,22 @@ class LSTM:
     @staticmethod
     def train_with_sgd(model, Xs, y, learning_rate=0.005, nepoch=1, evaluate_loss_after=5):
         losses = []
+        num_examples_seen = 0
         #print 'cjjc', len(Xs), len(y)
         for epoch in xrange(nepoch):
             if(epoch % evaluate_loss_after ==0):
                 loss = LSTM.calc_total_loss(Xs, y, model)
-                losses.append(loss)
+                losses.append((num_examples_seen, loss))
                 time = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-                print '%s loss %f' %(time, loss)
+                print '%s loss %f %d' %(time, loss, num_examples_seen)
+                if(len(losses) > 1 and losses[-1][1] > losses[-2][1]):
+                    learning_rate *= 0.5
+                    print "Setting learning rate to %f" % learning_rate
                 sys.stdout.flush()
 
             
             for i in xrange(len(y)):
                 LSTM.sgd_step(Xs[i], y[i], learning_rate, model)
+                num_examples_seen += 1
 
 
