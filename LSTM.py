@@ -76,7 +76,6 @@ class LSTM:
     def backword(dY, cache):
 
         Wd = cache['Wd']
-
         Hout = cache['Hout']
         IFOG = cache['IFOG']
         IFOGf = cache['IFOGf']
