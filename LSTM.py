@@ -3,6 +3,7 @@ from utils import initw
 from utils import softmax
 import sys
 from datetime import datetime
+from utils import randi
 
 class LSTM:
 
@@ -82,7 +83,6 @@ class LSTM:
         C = cache['C']
         Hin = cache['Hin']
         WLSTM = cache['WLSTM']
-        X = cache['X']
 
         dWd = Hout.transpose().dot(dY)
         dbd = np.sum(dY, axis=0, keepdims=True)
@@ -190,5 +190,61 @@ class LSTM:
             for i in xrange(len(y)):
                 LSTM.sgd_step(Xs[i], y[i], learning_rate, model)
                 num_examples_seen += 1
+
+    @staticmethod
+    def grad_check(Xs, y, model):
+        py, cache = LSTM.forward(Xs, model)
+        y = np.reshape(y,(len(y),-1))
+        dY = py
+        dY[np.arange(len(y)), y] -= 1
+        bp = LSTM.backword(dY, cache)
+
+        num_checks = 10
+        delta = 1e-5
+        rel_error_thr_warning = 1e-1
+        rel_error_thr_error = 1
+
+        for p in model.keys():
+            mat = model[p]
+
+            for i in xrange(num_checks):
+                ri = randi(mat.size)
+
+                old_val = mat.flat[ri]
+                mat.flat[ri] = old_val + delta
+                cost0 = LSTM.calc_total_loss(Xs, y, model)
+                mat.flat[ri] = old_val - delta
+                cost1 = LSTM.calc_total_loss(Xs, y, model)
+                mat.flat[ri] = old_val
+
+                grad_analytic = bp[p][ri]
+                grad_numerical = (cost0 - cost1) / (2 * delta)
+
+
+                # compare them
+                if grad_numerical == 0 and grad_analytic == 0:
+                    rel_error = 0 # both are zero, OK.
+                    status = 'OK'
+                elif abs(grad_numerical) < 1e-7 and abs(grad_analytic) < 1e-7:
+                    rel_error = 0 # not enough precision to check this
+                    status = 'VAL SMALL WARNING'
+                else:
+                    rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic)
+                    status = 'OK'
+                    if rel_error > rel_error_thr_warning: status = 'WARNING'
+                    if rel_error > rel_error_thr_error: status = '!!!!! NOTOK'
+                    print 'Gradient Check Error: parameter=%s ix=%d' % (p, i)
+
+
+                # print stats
+                print '%s checking param %s index %8d (val = %+8f), analytic = %+8f, numerical = %+8f, relative error = %+8f' \
+                % (status, p, ri, old_val, grad_analytic, grad_numerical, rel_error)
+
+
+
+
+
+
+
 
 
