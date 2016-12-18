@@ -43,8 +43,8 @@ class LSTM:
             
             Hin[t, 0] = 1
             #Hin[t, 1:1+d] = X[t]
-            Hin[t, 1:1+d] = prev # one hot representation            
-            Hin[t, 1+d+X[t]] = 1
+            Hin[t, 1:1+d] = prev
+            Hin[t, 1+d+X[t]] = 1 # one hot representation
 
             IFOG[t] = Hin[t].dot(WLSTM)
 
@@ -72,6 +72,14 @@ class LSTM:
         cache['Hin'] = Hin
 
         return Y, cache
+
+    @staticmethod
+    def fuck(Xs, model):
+        y, c = LSTM.forward(Xs, model)
+        model['WLSTM'] += 100
+        y2, c = LSTM.forward(Xs,model)
+        print 'y1 ', y
+        print 'y2 ', y2
 
     @staticmethod
     def backword(dY, cache):
@@ -158,6 +166,9 @@ class LSTM:
         y = np.reshape(y,(len(y),-1))
         dY = py
         dY[np.arange(len(y)), y] -= 1
+        #print 'len!! ', len(y)
+        #print 'y!!, ', y
+        #print 'dy!!, ', dY
         #print 'dY: ', dY
 
         bp = LSTM.backword(dY, cache)
@@ -192,53 +203,75 @@ class LSTM:
                 num_examples_seen += 1
 
     @staticmethod
-    def grad_check(Xs, y, model):
-        py, cache = LSTM.forward(Xs, model)
-        y = np.reshape(y,(len(y),-1))
-        dY = py
-        dY[np.arange(len(y)), y] -= 1
-        bp = LSTM.backword(dY, cache)
+    def grad_check(X, Y, model):
+        n = len(Y)
 
-        num_checks = 10
-        delta = 1e-5
-        rel_error_thr_warning = 1e-1
-        rel_error_thr_error = 1
+        for num in xrange(n):
 
-        for p in model.keys():
-            mat = model[p]
+            Xs = X[num]
+            y = Y[num]
 
-            for i in xrange(num_checks):
-                ri = randi(mat.size)
+            #print '**************888'
+            #LSTM.fuck(Xs, model)
+            #print '**************888'
 
-                old_val = mat.flat[ri]
-                mat.flat[ri] = old_val + delta
-                cost0 = LSTM.calc_total_loss(Xs, y, model)
-                mat.flat[ri] = old_val - delta
-                cost1 = LSTM.calc_total_loss(Xs, y, model)
-                mat.flat[ri] = old_val
+            py, cache = LSTM.forward(Xs, model)
+            y = np.reshape(y,(len(y),-1))
+            dY = py
+            dY[np.arange(len(y)), y] -= 1
+            bp = LSTM.backword(dY, cache)
 
-                grad_analytic = bp[p][ri]
-                grad_numerical = (cost0 - cost1) / (2 * delta)
+            num_checks = 10
+            #delta = 1e-5
+            delta = 1
+            rel_error_thr_warning = 1e-1
+            rel_error_thr_error = 1
+
+            num_checks = 100
+            for p in model.keys():
+                mat = model[p]
+
+                for i in xrange(num_checks):
+                    ri = randi(mat.size)
+
+                    old_val = mat.flat[ri]
+                    mat.flat[ri] = old_val + delta
+                    #old_val = mat
+                    #mat = old_val + delta
+                    y1, c = LSTM.forward(Xs,model)
+                    cost0 = LSTM.calc_total_loss(X, Y, model)
+                    print 'FIFIF ', model[p].flat[ri]
+                    mat.flat[ri] = old_val - delta
+                    #mat = old_val - delta
+                    y2, c = LSTM.forward(Xs,model)
+                    print 'ENENE ', model[p].flat[ri]
+                    #print 'y1 ',y1,
+                    #print 'y2 ',y2
+                    cost1 = LSTM.calc_total_loss(X, Y, model)
+                    mat.flat[ri] = old_val
+                    #mat = old_val
+                    print 'cost ', cost0, cost1
+
+                    grad_analytic = bp[p].flat[ri]
+                    grad_numerical = (cost0 - cost1) / (2 * delta)
 
 
-                # compare them
-                if grad_numerical == 0 and grad_analytic == 0:
-                    rel_error = 0 # both are zero, OK.
-                    status = 'OK'
-                elif abs(grad_numerical) < 1e-7 and abs(grad_analytic) < 1e-7:
-                    rel_error = 0 # not enough precision to check this
-                    status = 'VAL SMALL WARNING'
-                else:
-                    rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic)
-                    status = 'OK'
-                    if rel_error > rel_error_thr_warning: status = 'WARNING'
-                    if rel_error > rel_error_thr_error: status = '!!!!! NOTOK'
-                    print 'Gradient Check Error: parameter=%s ix=%d' % (p, i)
+                    # compare them
+                    if grad_numerical == 0 and grad_analytic == 0:
+                        rel_error = 0 # both are zero, OK.
+                        status = 'OK'
+                    elif abs(grad_numerical) < 1e-7 and abs(grad_analytic) < 1e-7:
+                        rel_error = 0 # not enough precision to check this
+                        status = 'VAL SMALL WARNING'
+                    else:
+                        rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic)
+                        status = 'OK'
+                        if rel_error > rel_error_thr_warning: status = 'WARNING'
+                        if rel_error > rel_error_thr_error: status = '!!!!! NOTOK'
 
-
-                # print stats
-                print '%s checking param %s index %8d (val = %+8f), analytic = %+8f, numerical = %+8f, relative error = %+8f' \
-                % (status, p, ri, old_val, grad_analytic, grad_numerical, rel_error)
+                    # print stats
+                    print '%s checking param %s index %8d (val = %+8f), analytic = %+8f, numerical = %+8f, relative error = %+8f' \
+                    % (status, p, ri, old_val, grad_analytic, grad_numerical, rel_error)
 
 
 
